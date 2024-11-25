@@ -143,29 +143,30 @@ The guesser has been completely redesigned as a multi-agent system composed of t
 1. The guesser and host get stuck in a loop when the host gives a slightly incorrect response.
    Example:
 
-- **Topic**: "Tree"
-- **Guesser**: Is it a flowering plant?
-- **Host**: Yes
-- **Guesser**: Is it a bamboo?
-- **Host**: No
-- **Guesser**: Is it a bamboo?
-- **Host**: No
-  ...
-  and so the loop continues.
+- *Topic*: "Tree"
+- *Guesser*: Is it a flowering plant?
+- *Host*: Yes
+- *Guesser*: Is it a bamboo?
+- *Host*: No
+- *Guesser*: Is it a bamboo?
+- *Host*: No
+...
+
+and so the loop continues.
 
 2. v2 of the prompt forces the guesser to change the question if it's been askked and answered. The evaluator then stops asking the same question or making the same guess.
 
 3. However, during evaluation, there are cases when the guesser might still repeat the same question cause it is quite sure about the answer. When it gets multiple no's it starts becoming more specific.
-   **Example of this scenario **
+
+**Example of this scenario**
 
 - **Topic**: "Computer"
-- **Guesser**: Is it a laptop?
-- **Host**: No
-- **Guesser**: Is it a laptop?
-- **Host**: No
-- **Guesser**: Is it a chromebook?
-- **Host**: No
-
+- *Guesser*: Is it a laptop?
+- *Host*: No
+- *Guesser*: Is it a laptop?
+- *Host*: No
+- *Guesser*: Is it a chromebook?
+- *Host*: No
 ...
 
 **Some possible improvements**
