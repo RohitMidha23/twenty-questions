@@ -13,6 +13,10 @@ The agents are then run, passing the topic as input and we evaluate how many tim
 
 ### Parallel Execution
 
-Currently, the evaluation is not parallelized.
+The evaluation framework uses parallel execution to efficiently test multiple topics simultaneously. This is implemented using Python's `ThreadPoolExecutor`.
 
-However, the evaluation can be parallelized by bringing about parallel execution at the level of passing `test_topics` to the agents.
+Key aspects of the parallel execution:
+
+1. Each game/topic is run in a separate thread to maximize throughput
+2. Progress is tracked using `tqdm` to show completion status
+3. Results are collected asynchronously as games complete

@@ -70,10 +70,7 @@ def host_node(state: GameState, config: RunnableConfig) -> GameState:
     topic = state.get("topic")
     # At the other steps, answer the guesser's question
     if guesser_question:
-        print("Topic: ", topic)
-        print("Guesser question: ", guesser_question.question)
         if topic in guesser_question.question:
-            print("Correct guess!")
             return {
                 "next": END,
                 "messages": [HumanMessage(content="Correct guess!")],

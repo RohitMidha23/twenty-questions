@@ -8,6 +8,10 @@ from langchain_anthropic import ChatAnthropic
 from langchain_openai import ChatOpenAI
 from pydantic import BaseModel
 from tqdm import tqdm
+from concurrent.futures import ThreadPoolExecutor
+import os
+import concurrent.futures
+import logging
 
 from agents.v1.agent import get_game_graph_v1, get_sample_llms_v1
 from agents.v2.agent import get_game_graph_v2, get_sample_llms_v2
@@ -16,7 +20,7 @@ from langchain_core.runnables.config import RunnableConfig
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.prompts import ChatPromptTemplate
 
-
+logger = logging.getLogger(__name__)
 class GameResult(BaseModel):
     topic: str
     correct_guess: bool
@@ -94,21 +98,67 @@ class TwentyQuestionsEvaluator:
         self.results: List[GameResult] = []
         self.config = config
         self.agent_version = agent_version
+        self.max_workers = min(32, (os.cpu_count() or 1) * 4)
 
     def evaluate_prompt_combination(
         self,
     ) -> List[GameResult]:
-        """Evaluate a specific prompt and LLM combination."""
+        """Evaluate a specific prompt and LLM combination using thread pool.
+        
+        Returns:
+            List[GameResult]: Results from all game evaluations
+        """
+        topics_iter = iter(self.test_topics * self.num_runs) # to avoid repeated processing
         results = []
+        
+        
+        try:
+            with ThreadPoolExecutor(max_workers=self.max_workers) as executor:
+                futures = {}
+                for _ in range(self.max_workers):
+                    try:
+                        topic = next(topics_iter)
+                        future = executor.submit(self._run_single_game, topic, self.config)
+                        futures[future] = topic
+                    except StopIteration:
+                        break
 
-        for topic in tqdm(self.test_topics * self.num_runs):
-            start_time = time.time()
-            result = self._run_single_game(topic, self.config)
-            result.total_time = time.time() - start_time
-            results.append(result)
+                with tqdm(total=len(self.test_topics) * self.num_runs, 
+                         desc="Evaluating games") as pbar:
+                    while futures:
+                        done, _ = concurrent.futures.wait(
+                            futures,
+                            return_when=concurrent.futures.FIRST_COMPLETED
+                        )
 
-            # Add small delay to avoid rate limiting
-            time.sleep(1)
+                        for future in done:
+                            topic = futures.pop(future)
+                            try:
+                                result = future.result()
+                                results.append(result)
+                            except Exception as e:
+                                logger.error(f"Error processing game for topic '{topic}': {str(e)}")
+                                results.append(GameResult(
+                                    topic=topic,
+                                    correct_guess=False,
+                                    num_questions=0,
+                                    error=str(e),
+                                    total_time=0,
+                                    messages=[],
+                                ))
+                            finally:
+                                pbar.update(1)
+
+                            try:
+                                next_topic = next(topics_iter)
+                                future = executor.submit(self._run_single_game, next_topic, self.config)
+                                futures[future] = next_topic
+                            except StopIteration:
+                                continue
+
+        except Exception as e:
+            logger.error(f"Fatal error in evaluation process: {str(e)}")
+            raise
 
         return results
 
@@ -179,13 +229,16 @@ class TwentyQuestionsEvaluator:
             error_rate=len(error_games) / total_games,
         )
 
-    def run_evaluation(self) -> EvaluationMetrics:
+    def run_evaluation(
+        self, compute_metrics: bool = True
+    ) -> EvaluationMetrics | List[GameResult]:
         """Run evaluation and compute metrics."""
 
         self.results = self.evaluate_prompt_combination()
-        metrics = self._compute_metrics(self.results)
-
-        return metrics
+        if compute_metrics:
+            metrics = self._compute_metrics(self.results)
+            return metrics
+        return self.results
 
 
 def main_v1(test_topics: List[str]):
@@ -216,7 +269,6 @@ def main_v1(test_topics: List[str]):
 
 
 def main_v2(test_topics: List[str]):
-    
 
     base_llm = ChatOpenAI(model="gpt-4o-mini", temperature=1)
     host_llm, guesser_recommender_llm, guesser_evaluator_llm = get_sample_llms_v2(
@@ -254,6 +306,5 @@ if __name__ == "__main__":
     # Load test topics from file
     with open("evals/topics.txt", "r") as f:
         test_topics = [line.strip() for line in f.readlines()]
-    test_topics = test_topics[:1]  # for testing
     main_v1(test_topics)
     main_v2(test_topics)
