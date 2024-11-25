@@ -1,0 +1,10 @@
+elephant
+car
+dog
+tree
+apple
+computer 
+guitar 
+butterfly
+river
+
